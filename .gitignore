@@ -18,3 +18,6 @@ npm-debug.log*
 pnpm-debug.log*
 
 .DS_Store
+*.tsbuildinfo
+.env.*
+!.env.example
