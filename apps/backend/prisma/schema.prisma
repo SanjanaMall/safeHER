@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  WOMAN
+  GUARDIAN
+  VOLUNTEER
+  ADMIN
+}
+
+enum AlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
+enum AlertSource {
+  APP
+  SMS
+  SHAKE
+}
+
+enum NotificationChannel {
+  SOCKET
+  PUSH
+  SMS
+  CALL
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum SmsInboundResult {
+  ACCEPTED
+  BAD_MAC
+  STALE
+  REPLAY
+  UNKNOWN_USER
+  MALFORMED
+}
+
+model User {
+  id            String   @id @default(uuid())
+  phone         String   @unique
+  name          String
+  role          UserRole @default(WOMAN)
+  smsId         String?  @unique
+  smsSecretEnc  String?
+  smsKeyVersion Int      @default(1)
+  smsCounter    Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  alerts     Alert[]
+  smsInbound SmsInbound[]
+  guardianOf GuardianLink[] @relation("Woman")
+  guarding   GuardianLink[] @relation("Guardian")
+}
+
+model GuardianLink {
+  id         String @id @default(uuid())
+  userId     String
+  guardianId String
+  status     String @default("PENDING")
+
+  user     User @relation("Woman", fields: [userId], references: [id])
+  guardian User @relation("Guardian", fields: [guardianId], references: [id])
+
+  @@unique([userId, guardianId])
+}
+
+model Alert {
+  id             String      @id @default(uuid())
+  userId         String
+  status         AlertStatus @default(ACTIVE)
+  source         AlertSource @default(APP)
+  clientAlertId  String?     @unique
+  createdAt      DateTime    @default(now())
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+
+  user          User            @relation(fields: [userId], references: [id])
+  locations     AlertLocation[]
+  notifications Notification[]
+  smsInbound    SmsInbound[]
+
+  @@index([userId, status])
+}
+
+model AlertLocation {
+  id         String   @id @default(uuid())
+  alertId    String
+  lat        Float
+  lng        Float
+  accuracy   Float?
+  recordedAt DateTime @default(now())
+
+  alert Alert @relation(fields: [alertId], references: [id])
+
+  @@index([alertId, recordedAt])
+}
+
+model Notification {
+  id                String              @id @default(uuid())
+  alertId           String
+  recipientId       String?
+  recipientPhone    String?
+  channel           NotificationChannel
+  status            NotificationStatus  @default(QUEUED)
+  providerMessageId String?
+  createdAt         DateTime            @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+
+  alert Alert @relation(fields: [alertId], references: [id])
+
+  @@index([alertId])
+}
+
+model SmsInbound {
+  id         String           @id @default(uuid())
+  fromNumber String
+  rawBody    String
+  receivedAt DateTime         @default(now())
+  result     SmsInboundResult
+  userId     String?
+  alertId    String?
+
+  user  User?  @relation(fields: [userId], references: [id])
+  alert Alert? @relation(fields: [alertId], references: [id])
+}
+
+model AuditLog {
+  id     String   @id @default(uuid())
+  actor  String
+  action String
+  target String
+  at     DateTime @default(now())
+}
